@@ -7,13 +7,13 @@ rvm:
 sudo: false
 
 gemfile:
-  - gemfiles/rails_41.gemfile
-  - gemfiles/rails_42.gemfile
-  - gemfiles/rails_50.gemfile
+  - gemfiles/4.1.gemfile
+  - gemfiles/4.2.gemfile
+  - gemfiles/5.0.gemfile
 
 services:
   - mysql
 before_install:
-  - mysql -e 'CREATE DATABASE zdm_test;'
+  - mysql -e 'CREATE DATABASE zdm_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
 
 script: 'bundle exec rake'

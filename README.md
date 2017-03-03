@@ -14,3 +14,5 @@ Install
 ```
 gem install zdm
 ```
+
+[![Build Status](https://travis-ci.org/itrp/zdm.png)](https://travis-ci.org/itrp/zdm)

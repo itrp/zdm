@@ -28,7 +28,7 @@ describe Zdm do
 
   it 'migrates live tables' do
     Zdm.change_table(:people) do |m|
-      m.alter("DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+      m.alter("DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci")
       m.add_column('test', "varchar(32) DEFAULT 'foo'")
       m.change_column('name', 'varchar(99) NOT NULL')
     end
@@ -39,14 +39,13 @@ describe Zdm do
       CREATE TABLE `people` (
         `id` int(11) NOT NULL AUTO_INCREMENT,
         `account_id` int(11) DEFAULT NULL,
-        `name` varchar(99) COLLATE utf8mb4_unicode_ci NOT NULL,
-        `code` varchar(255) CHARACTER SET utf8 DEFAULT NULL,
+        `name` varchar(99) COLLATE utf8_unicode_ci NOT NULL,
+        `code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
         `created_at` datetime DEFAULT NULL,
-        `test` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT 'foo',
-        PRIMARY KEY (`id`),
-        UNIQUE KEY `index_people_on_name` (`name`),
-        KEY `index_people_on_account_id_and_code` (`account_id`,`code`) USING BTREE
-      ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `test` varchar(32) COLLATE utf8_unicode_ci DEFAULT 'foo',
+        PRIMARY KEY (`id`), UNIQUE KEY `index_people_on_name` (`name`),
+        KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE
+      ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     EOS
 
     archive_tables = conn.send(Zdm.tables_method).select { |name| name.starts_with?('zdma_') }
@@ -64,24 +63,23 @@ describe Zdm do
     ])
 
     Zdm.change_table(:people) do |m|
-      m.alter("DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci")
+      m.alter("DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
       m.remove_column('test')
-      m.change_column('name', 'varchar(255)')
+      m.change_column('name', 'varchar(30)')
     end
 
     stmt = conn.select_rows('show create table people')[0][1]
     expect(stmt.squish).to eq(<<-EOS.squish)
-      CREATE TABLE `people` (
-        `id` int(11) NOT NULL AUTO_INCREMENT,
-        `account_id` int(11) DEFAULT NULL,
-        `name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
-        `code` varchar(255) CHARACTER SET utf8 DEFAULT NULL,
-        `created_at` datetime DEFAULT NULL,
-        PRIMARY KEY (`id`),
-        UNIQUE KEY `index_people_on_name` (`name`),
-        KEY `index_people_on_account_id_and_code` (`account_id`,`code`) USING BTREE
-      ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
-    EOS
+        CREATE TABLE `people` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `account_id` int(11) DEFAULT NULL,
+          `name` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+          `code` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+          `created_at` datetime DEFAULT NULL, PRIMARY KEY (`id`),
+          UNIQUE KEY `index_people_on_name` (`name`),
+          KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE
+        ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      EOS
 
     archive_tables = conn.send(Zdm.tables_method).select { |name| name.starts_with?('zdma_') }
     expect(archive_tables.length).to eq(2)

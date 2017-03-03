@@ -10,13 +10,17 @@ require 'active_record'
 require 'yaml'
 require 'erb'
 
+# require 'rspec/support'
+# RSpec::Support.require_rspec_support "object_formatter"
+# RSpec::Support::ObjectFormatter.default_instance.max_formatted_output_length = nil
+
 config = YAML::load(ERB.new(IO.read(File.dirname(__FILE__) + '/database.yml')).result)
 ActiveRecord::Base.establish_connection(config['test'])
 
 ActiveRecord::Schema.define version: 0 do
   create_table :people, force: true do |t|
     t.integer :account_id
-    t.string :name
+    t.string :name, limit: 30
     t.string :code
     t.datetime :created_at
   end

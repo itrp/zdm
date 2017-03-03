@@ -192,8 +192,11 @@ module Zdm
       def create_destination_indexes
         @indexes.each do |index_def|
           opts = { name: index_def.name, using: index_def.using }
-          if index_def.lengths.compact.any?
-            opts[:length] = Hash[index_def.columns.map.with_index { |col, idx| [col, index_def.lengths[idx]] }]
+
+          opts[:length] = if index_def.lengths.is_a?(Hash)
+            index_def.lengths
+          elsif index_def.lengths.compact.any?
+            Hash[index_def.columns.map.with_index { |col, idx| [col, index_def.lengths[idx]] }]
           end
           connection.add_index(table.copy, index_def.columns, opts)
         end
