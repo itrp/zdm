@@ -1,7 +1,7 @@
 PATH
   remote: ..
   specs:
-    zdm (1.0.0)
+    zdm (1.0.2)
       activerecord (>= 4.0)
 
 GEM
