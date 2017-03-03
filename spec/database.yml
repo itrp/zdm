@@ -1,0 +1,21 @@
+test:
+  adapter: mysql2
+  encoding: utf8mb4
+  charset: utf8mb4
+  collation: utf8mb4_unicode_ci
+  host: <%= ENV['DB_HOST'] %>
+  port: <%= ENV['DB_PORT'] %>
+  username: <%= ENV['DB_USERNAME'] || 'travis' %>
+  password: <%= ENV['DB_PASSWORD'] %>
+  database: <%= ENV['DB_DATABASE'] || 'zdm_test' %>
+  sslkey: <%= ENV['DB_SSLKEY'] %>
+  sslcert: <%= ENV['DB_SSLCERT'] %>
+  sslca: <%= ENV['DB_SSLCA'] %>
+  sslcapath: <%= ENV['DB_SSLCAPATH'] %>
+  sslcipher: <%= ENV['DB_SSLCIPHER'] %>
+  sslverify: <%= ENV['DB_SSLVERIFY'] || false %>
+  strict: false
+  variables:
+    sql_mode: 'NO_ENGINE_SUBSTITUTION'
+    character_set_connection: utf8mb4
+    collation_connection: utf8mb4_unicode_ci
