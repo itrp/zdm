@@ -26,6 +26,7 @@ ActiveRecord::Schema.define version: 0 do
   end
   add_index(:people, :name, unique: true)
   add_index(:people, [:account_id, :code], length: {account_id: nil, code: 191})
+  add_index(:people, :created_at)
 
   create_table :people_teams, id: false, force: true do |t|
     t.integer :team_id, null: false
@@ -35,4 +36,6 @@ end
 
 ActiveRecord::Base.connection.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (10,'foo','bar','2017-03-01 23:59:59')])
 ActiveRecord::Base.connection.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (20,'foo2','bar2','2017-03-02 23:59:59')])
+
+# ActiveRecord::Base.logger = Logger.new($stdout)
 

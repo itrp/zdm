@@ -76,12 +76,12 @@ module Zdm
       validate
       set_session_lock_wait_timeouts
       cleanup
-      create_destination_table
-      drop_destination_indexes
+      create_copy_table
+      drop_copy_indexes
       apply_ddl_statements
       create_triggers
       batched_copy
-      create_destination_indexes
+      create_copy_indexes
       atomic_switcharoo!
     ensure
       cleanup
@@ -124,7 +124,7 @@ module Zdm
         end
       end
 
-      def create_destination_table
+      def create_copy_table
         execute('CREATE TABLE `%s` LIKE `%s`' % [table.copy, table.origin])
       end
 
@@ -180,26 +180,39 @@ module Zdm
         "zdmt_#{trigger_type}_#{table.origin}"[0...64]
       end
 
-      # Drop indexes to speed up batched_copy
-      def drop_destination_indexes
+      # Drop indexes to speed up batched_copy.
+      #
+      # "Online DDL support for adding secondary indexes means that you can
+      # generally speed the overall process of creating and loading a table
+      # and associated indexes by creating the table without any secondary
+      # indexes, then adding the secondary indexes after the data is loaded."
+      # https://dev.mysql.com/doc/refman/5.7/en/innodb-create-index-overview.html#idm140602200949744
+      def drop_copy_indexes
         @indexes = connection.indexes(table.copy).reject(&:unique)
         @indexes.each do |index_def|
           execute('ALTER TABLE `%s` DROP INDEX `%s`' % [table.copy, index_def.name])
         end
       end
 
-      # Recreate the indexes previously dropped
-      def create_destination_indexes
-        @indexes.each do |index_def|
-          opts = { name: index_def.name, using: index_def.using }
-
-          opts[:length] = if index_def.lengths.is_a?(Hash)
+      # Recreate the indexes previously dropped, using 1 statement so the table
+      # is read through once.
+      def create_copy_indexes
+        return if @indexes.empty?
+        indexes = @indexes.map do |index_def|
+          lengths = if index_def.lengths.is_a?(Hash)
             index_def.lengths
           elsif index_def.lengths.compact.any?
             Hash[index_def.columns.map.with_index { |col, idx| [col, index_def.lengths[idx]] }]
           end
-          connection.add_index(table.copy, index_def.columns, opts)
+          index_columns = index_def.columns.map.with_index do |col, idx|
+            index_col_name = '`%s`' % col
+            column_length = lengths && lengths[col]
+            index_col_name << '(%s)' % column_length if column_length
+            index_col_name
+          end
+          "ADD INDEX `#{index_def.name}` (#{index_columns.join(',')}) USING #{index_def.using}"
         end
+        execute('ALTER TABLE `%s` %s' % [table.copy, indexes.join(', ')])
       end
 
       BATCH_SIZE = 40_000
@@ -216,6 +229,12 @@ module Zdm
 
         insert_columns = common_columns.map {|c| "`#{c}`"}.join(', ')
         select_columns = common_columns.map {|c| "`#{table.origin}`.`#{c}`"}.join(', ')
+        sql = <<-SQL.squish
+          INSERT IGNORE INTO `#{table.copy}` (#{insert_columns})
+          SELECT #{select_columns}
+          FROM `#{table.origin}`
+          WHERE `#{table.origin}`.`id` BETWEEN %s AND %s
+        SQL
 
         batch_size = BATCH_SIZE
         batch_end = min - 1
@@ -225,12 +244,7 @@ module Zdm
           batch_end = [batch_start + batch_size - 1, max].min
           start_batch_time = Time.now
 
-          execute(<<-SQL.squish)
-            INSERT IGNORE INTO `#{table.copy}` (#{insert_columns})
-            SELECT #{select_columns}
-            FROM `#{table.origin}`
-            WHERE `#{table.origin}`.`id` BETWEEN #{batch_start} AND #{batch_end}
-          SQL
+          execute(sql % [batch_start, batch_end])
 
           if $exit
             write('Received SIGTERM, exiting...')

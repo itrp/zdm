@@ -8,6 +8,8 @@ Instead of using outfiles we follow [lhm](https://github.com/soundcloud/lhm)'s a
 
 The code is the readme. If you donot grok the code then you really should not use this.
 
+See also documentation from mysql on [Online Status for DDL Operations](https://dev.mysql.com/doc/refman/5.7/en/innodb-create-index-overview.html#innodb-online-ddl-summary-grid).
+
 Install
 =======
 
