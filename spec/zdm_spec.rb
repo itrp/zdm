@@ -5,6 +5,11 @@ describe Zdm do
   before(:example) {
     Zdm.io = false
     Zdm.cleanup
+
+    conn = ActiveRecord::Base.connection
+    conn.execute(%[TRUNCATE people])
+    conn.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (10,'foo','bar','2017-03-01 23:59:59')])
+    conn.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (20,'foo2','bar2','2017-03-02 23:59:59')])
   }
 
   it 'requires an autoincrement primary key `id` field' do
@@ -86,5 +91,50 @@ describe Zdm do
     archive_tables = conn.send(Zdm.tables_method).select { |name| name.starts_with?('zdma_') }
     expect(archive_tables.length).to eq(2)
   end
+
+  context 'execute_in_batches' do
+    before(:example) do
+      @conn = ActiveRecord::Base.connection
+      (1..20).each do |idx|
+        @conn.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (10,'person-#{idx}','P#{idx}','2017-03-01 23:59:59')])
+      end
+      Zdm.io = StringIO.new
+      @sql = "UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN %s AND %s"
+    end
+
+    after(:example) do
+      @conn.execute(%[DELETE FROM people WHERE name LIKE 'person%'])
+    end
+
+    it 'updates a table in batches' do
+      Zdm.execute_in_batches('people', batch_size: 4, progress_every: 1) do |batch_start, batch_end|
+        sleep(0.6)
+        @sql % [batch_start, batch_end]
+      end
+      expect(Zdm.io.string).to eq(%[people: 36.36% (8/22)\npeople: 72.73% (16/22)\npeople: Completed (3 secs)\n])
+      expect(@conn.select_value(%[SELECT COUNT(*) FROM people WHERE code LIKE '%U'])).to eq(22)
+    end
+
+    it 'updates part of a table in batches' do
+      batches = []
+      Zdm.execute_in_batches('people', start: 5, finish: 18, batch_size: 4, progress_every: 1) do |batch_start, batch_end|
+        sleep(0.6)
+        batches << @sql % [batch_start, batch_end]
+        @sql % [batch_start, batch_end]
+      end
+      expect(Zdm.io.string).to eq(%[people: 57.14% (8/14)\npeople: Completed (2 secs)\n])
+      expect(batches).to eq([
+        %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 5 AND 8],
+        %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 9 AND 12],
+        %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 13 AND 16],
+        %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 17 AND 18],
+      ])
+      expect(@conn.select_values(%[SELECT code FROM people WHERE code LIKE '%U'])).to eq([
+        'P3U', 'P4U', 'P5U', 'P6U', 'P7U', 'P8U', 'P9U', 'P10U', 'P11U', 'P12U', 'P13U', 'P14U', 'P15U', 'P16U'
+      ])
+    end
+
+  end
+
 
 end

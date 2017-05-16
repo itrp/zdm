@@ -12,21 +12,88 @@ module Zdm
     end
 
     def cleanup(before: nil)
-      conn = ActiveRecord::Base.connection
-      zdm_tables = conn.send(tables_method).select { |name| name.starts_with?('zdm_') }
+      zdm_tables = connection.send(tables_method).select { |name| name.starts_with?('zdm_') }
       zdm_tables.each { |name| Migrator.new(Table.new(name.sub(/^zdm_/, ''))).cleanup }
 
-      zdm_archive_tables = conn.send(tables_method).select { |name| name.starts_with?('zdma_') }
+      zdm_archive_tables = connection.send(tables_method).select { |name| name.starts_with?('zdma_') }
       if before
         zdm_archive_tables.select! { |table|
           Time.strptime(table, 'zdma_%Y%m%d_%H%M%S%N') <= before
         }
       end
-      zdm_archive_tables.each { |name| conn.execute('DROP TABLE `%s`' % name) }
+      zdm_archive_tables.each { |name| execute('DROP TABLE `%s`' % name) }
     end
 
     def tables_method
       ActiveRecord.version.to_s =~ /^5/ ? :data_sources : :tables
+    end
+
+    BATCH_SIZE = 40_000
+    DECREASE_THROTTLER = 4  # seconds
+    DECREASE_SIZE = 5_000
+    MIN_BATCH_SIZE = 10_000
+    PROGRESS_EVERY = 30  # seconds
+    def execute_in_batches(table_name, start: nil, finish: nil, batch_size: BATCH_SIZE, progress_every: PROGRESS_EVERY, &block)
+      min = start || connection.select_value('SELECT MIN(`id`) FROM %s' % table_name)
+      return unless min
+
+      max = finish || connection.select_value('SELECT MAX(`id`) FROM %s' % table_name)
+      todo = max - min + 1
+      return unless todo > 0
+
+      batch_end = min - 1
+      start_time = last_progress = Time.now
+      while true
+        batch_start = batch_end + 1
+        batch_end = [batch_start + batch_size - 1, max].min
+        start_batch_time = Time.now
+
+        sql = yield batch_start, batch_end
+        execute(sql) if sql
+
+        if $exit
+          write(table_name, 'Received SIGTERM, exiting...')
+          cleanup
+          exit 1
+        end
+
+        # The end!
+        break if batch_end >= max
+
+        # Throttle
+        current_time = Time.now
+        if (current_time - start_batch_time) > DECREASE_THROTTLER
+          batch_size = [(batch_size - DECREASE_SIZE).to_i, MIN_BATCH_SIZE].max
+        end
+
+        # Periodically show progress
+        if (current_time - last_progress) >= progress_every
+          last_progress = current_time
+          done = batch_end - min + 1
+          write(table_name, "%.2f%% (#{done}/#{todo})" % (done.to_f / todo * 100.0))
+        end
+      end
+
+      duration = Time.now - start_time
+      duration = (duration < 2*60) ? "#{duration.to_i} secs" : "#{(duration / 60).to_i} mins"
+      write(table_name, "Completed (#{duration})")
+    end
+
+    private
+
+    def connection
+      ActiveRecord::Base.connection
+    end
+
+    def execute(stmt)
+      connection.execute(stmt)
+    end
+
+    def write(table_name, msg)
+      return if Zdm.io == false
+      io = Zdm.io || $stderr
+      io.puts("#{table_name}: #{msg}")
+      io.flush
     end
   end
 
@@ -80,7 +147,7 @@ module Zdm
       drop_copy_indexes
       apply_ddl_statements
       create_triggers
-      batched_copy
+      copy_in_batches
       create_copy_indexes
       atomic_switcharoo!
     ensure
@@ -180,7 +247,7 @@ module Zdm
         "zdmt_#{trigger_type}_#{table.origin}"[0...64]
       end
 
-      # Drop indexes to speed up batched_copy.
+      # Drop indexes to speed up copy_in_batches.
       #
       # "Online DDL support for adding secondary indexes means that you can
       # generally speed the overall process of creating and loading a table
@@ -215,18 +282,7 @@ module Zdm
         execute('ALTER TABLE `%s` %s' % [table.copy, indexes.join(', ')])
       end
 
-      BATCH_SIZE = 40_000
-      DECREASE_THROTTLER = 4  # seconds
-      DECREASE_SIZE = 5_000
-      MIN_BATCH_SIZE = 10_000
-      PROGRESS_EVERY = 30  # seconds
-      def batched_copy
-        min = connection.select_value('SELECT MIN(`id`) FROM %s' % table.origin)
-        return unless min
-
-        max = connection.select_value('SELECT MAX(`id`) FROM %s' % table.origin)
-        todo = max - min + 1
-
+      def copy_in_batches
         insert_columns = common_columns.map {|c| "`#{c}`"}.join(', ')
         select_columns = common_columns.map {|c| "`#{table.origin}`.`#{c}`"}.join(', ')
         sql = <<-SQL.squish
@@ -236,50 +292,11 @@ module Zdm
           WHERE `#{table.origin}`.`id` BETWEEN %s AND %s
         SQL
 
-        batch_size = BATCH_SIZE
-        batch_end = min - 1
-        start_time = last_progress = Time.now
-        while true
-          batch_start = batch_end + 1
-          batch_end = [batch_start + batch_size - 1, max].min
-          start_batch_time = Time.now
-
-          execute(sql % [batch_start, batch_end])
-
-          if $exit
-            write('Received SIGTERM, exiting...')
-            cleanup
-            exit 1
-          end
-
-          # The end!
-          break if batch_end >= max
-
-          # Throttle
-          current_time = Time.now
-          if (current_time - start_batch_time) > DECREASE_THROTTLER
-            batch_size = [(batch_size - DECREASE_SIZE).to_i, MIN_BATCH_SIZE].max
-          end
-
-          # Periodically show progress
-          if (current_time - last_progress) >= PROGRESS_EVERY
-            last_progress = current_time
-            done = batch_end - min + 1
-            write("%.2f%% (#{done}/#{todo})" % (done.to_f / todo * 100.0))
-          end
+        Zdm.execute_in_batches(table.origin) do |batch_start, batch_end|
+          sql % [batch_start, batch_end]
         end
-
-        duration = Time.now - start_time
-        duration = (duration < 2*60) ? "#{duration.to_i} secs" : "#{(duration / 60).to_i} mins"
-        write("Completed (#{duration})")
       end
 
-      def write(msg)
-        return if Zdm.io == false
-        io = Zdm.io || $stderr
-        io.puts("#{table.origin}: #{msg}")
-        io.flush
-      end
   end
 end
 trap('TERM') { $exit = true }

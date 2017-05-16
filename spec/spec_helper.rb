@@ -34,8 +34,5 @@ ActiveRecord::Schema.define version: 0 do
   end
 end
 
-ActiveRecord::Base.connection.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (10,'foo','bar','2017-03-01 23:59:59')])
-ActiveRecord::Base.connection.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (20,'foo2','bar2','2017-03-02 23:59:59')])
-
 # ActiveRecord::Base.logger = Logger.new($stdout)
 
