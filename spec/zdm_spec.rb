@@ -48,7 +48,8 @@ describe Zdm do
         `code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
         `created_at` datetime DEFAULT NULL,
         `test` varchar(32) COLLATE utf8_unicode_ci DEFAULT 'foo',
-        PRIMARY KEY (`id`), UNIQUE KEY `index_people_on_name` (`name`),
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `index_people_on_name` (`name`) USING BTREE,
         KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE,
         KEY `index_people_on_created_at` (`created_at`) USING BTREE
       ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
@@ -82,7 +83,7 @@ describe Zdm do
           `name` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
           `code` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
           `created_at` datetime DEFAULT NULL, PRIMARY KEY (`id`),
-          UNIQUE KEY `index_people_on_name` (`name`),
+          UNIQUE KEY `index_people_on_name` (`name`) USING BTREE,
           KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE,
           KEY `index_people_on_created_at` (`created_at`) USING BTREE
         ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -108,10 +109,10 @@ describe Zdm do
 
     it 'updates a table in batches' do
       Zdm.execute_in_batches('people', batch_size: 4, progress_every: 1) do |batch_start, batch_end|
-        sleep(0.6)
+        sleep(0.8)
         @sql % [batch_start, batch_end]
       end
-      expect(Zdm.io.string).to eq(%[people: 36.36% (8/22)\npeople: 72.73% (16/22)\npeople: Completed (3 secs)\n])
+      expect(Zdm.io.string).to eq(%[people: 36.36% (8/22)\npeople: 72.73% (16/22)\npeople: Completed (4 secs)\n])
       expect(@conn.select_value(%[SELECT COUNT(*) FROM people WHERE code LIKE '%U'])).to eq(22)
     end
 

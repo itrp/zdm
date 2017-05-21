@@ -144,11 +144,11 @@ module Zdm
       set_session_lock_wait_timeouts
       cleanup
       create_copy_table
-      drop_copy_indexes
+      # drop_copy_indexes
       apply_ddl_statements
       create_triggers
       copy_in_batches
-      create_copy_indexes
+      # create_copy_indexes
       atomic_switcharoo!
     ensure
       cleanup

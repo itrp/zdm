@@ -24,9 +24,9 @@ ActiveRecord::Schema.define version: 0 do
     t.string :code
     t.datetime :created_at
   end
-  add_index(:people, :name, unique: true)
-  add_index(:people, [:account_id, :code], length: {account_id: nil, code: 191})
-  add_index(:people, :created_at)
+  add_index(:people, :name, unique: true, using: :btree)
+  add_index(:people, [:account_id, :code], length: {account_id: nil, code: 191}, using: :btree)
+  add_index(:people, :created_at, using: :btree)
 
   create_table :people_teams, id: false, force: true do |t|
     t.integer :team_id, null: false
