@@ -34,6 +34,13 @@ module Zdm
     MIN_BATCH_SIZE = 10_000
     PROGRESS_EVERY = 30  # seconds
     def execute_in_batches(table_name, start: nil, finish: nil, batch_size: BATCH_SIZE, progress_every: PROGRESS_EVERY, &block)
+      find_in_batches(table_name, start: start, finish: finish, batch_size: batch_size, progress_every: progress_every) do |batch_start, batch_end|
+        sql = yield batch_start, batch_end
+        execute(sql) if sql
+      end
+    end
+
+    def find_in_batches(table_name, start: nil, finish: nil, batch_size: BATCH_SIZE, progress_every: PROGRESS_EVERY, &block)
       min = start || connection.select_value('SELECT MIN(`id`) FROM %s' % table_name)
       return unless min
 
@@ -48,8 +55,7 @@ module Zdm
         batch_end = [batch_start + batch_size - 1, max].min
         start_batch_time = Time.now
 
-        sql = yield batch_start, batch_end
-        execute(sql) if sql
+        yield batch_start, batch_end
 
         if $exit
           write(table_name, 'Received SIGTERM, exiting...')

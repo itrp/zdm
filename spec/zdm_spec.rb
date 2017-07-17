@@ -93,6 +93,31 @@ describe Zdm do
     expect(archive_tables.length).to eq(2)
   end
 
+  context 'find_in_batches' do
+    before(:example) do
+      @conn = ActiveRecord::Base.connection
+      (1..20).each do |idx|
+        @conn.execute(%[INSERT INTO people(account_id, name, code, created_at) VALUES (10,'person-#{idx}','P#{idx}','2017-03-01 23:59:59')])
+      end
+      Zdm.io = StringIO.new
+    end
+
+    after(:example) do
+      @conn.execute(%[DELETE FROM people WHERE name LIKE 'person%'])
+    end
+
+    it 'find all in batches' do
+      found = []
+      Zdm.find_in_batches('people', batch_size: 4, progress_every: 1) do |batch_start, batch_end|
+        sleep(0.8)
+        found << [batch_start, batch_end]
+      end
+      expect(Zdm.io.string).to match(/people: \d+\.\d+% \(\d+\/22\)/)
+      expect(Zdm.io.string).to match(/people: Completed \(\d+ secs\)$/)
+      expect(found).to eq([[1, 4], [5, 8], [9, 12], [13, 16], [17, 20], [21, 22]])
+    end
+  end
+
   context 'execute_in_batches' do
     before(:example) do
       @conn = ActiveRecord::Base.connection
@@ -112,7 +137,8 @@ describe Zdm do
         sleep(0.8)
         @sql % [batch_start, batch_end]
       end
-      expect(Zdm.io.string).to eq(%[people: 36.36% (8/22)\npeople: 72.73% (16/22)\npeople: Completed (4 secs)\n])
+      expect(Zdm.io.string).to match(/people: \d+\.\d+% \(\d+\/22\)/)
+      expect(Zdm.io.string).to match(/people: Completed \(\d+ secs\)$/)
       expect(@conn.select_value(%[SELECT COUNT(*) FROM people WHERE code LIKE '%U'])).to eq(22)
     end
 
@@ -120,10 +146,12 @@ describe Zdm do
       batches = []
       Zdm.execute_in_batches('people', start: 5, finish: 18, batch_size: 4, progress_every: 1) do |batch_start, batch_end|
         sleep(0.6)
-        batches << @sql % [batch_start, batch_end]
-        @sql % [batch_start, batch_end]
+        sql = @sql % [batch_start, batch_end]
+        batches << sql
+        sql
       end
-      expect(Zdm.io.string).to eq(%[people: 57.14% (8/14)\npeople: Completed (2 secs)\n])
+      expect(Zdm.io.string).to match(/people: \d+\.\d+% \(\d+\/14\)/)
+      expect(Zdm.io.string).to match(/people: Completed \(\d+ secs\)$/)
       expect(batches).to eq([
         %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 5 AND 8],
         %[UPDATE people SET code = CONCAT(code, 'U') WHERE id BETWEEN 9 AND 12],
