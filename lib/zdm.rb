@@ -136,6 +136,34 @@ module Zdm
     def rename_column(old_name, new_name)
       raise "Unsupported: you must first run a migration adding the column `#{new_name}`, deploy the code live, then run another migration at a later time to remove the column `#{old_name}`"
     end
+
+    def add_index(column_names, opts = {})
+      column_names = Array(column_names)
+      index_name = opts[:name] || "index_#{@origin}_on_#{column_names.join('_and_')}"
+      raise ArgumentError, "Index name '#{index_name}' on table #{@origin} is too long" if index_name.length > 64
+      index_type = opts[:type] || (opts[:unique] ? 'UNIQUE' : '')
+      index_using = "USING #{opts[:using] || 'btree'}"
+      index_columns = quoted_columns_for_index(column_names, opts).join(',')
+      ddl("CREATE #{index_type} INDEX `#{index_name}` #{index_using} ON `#{@copy}` (#{index_columns})")
+    end
+
+    def remove_index(index_name)
+      ddl("ALTER TABLE `#{@copy}` DROP INDEX `#{index_name}`")
+    end
+
+    private
+
+    def quoted_columns_for_index(column_names, opts)
+      option_strings = Hash[column_names.map {|name| [name, '']}]
+      length = opts[:length]
+      case length
+      when Hash
+        column_names.each {|name| option_strings[name] += "(#{length[name]})" if length.has_key?(name) && length[name].present?}
+      when Integer
+        column_names.each {|name| option_strings[name] += "(#{length})"}
+      end
+      column_names.map {|name| "`#{name}`#{option_strings[name]}"}
+    end
   end
 
   class Migrator

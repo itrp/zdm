@@ -36,6 +36,9 @@ describe Zdm do
       m.alter("DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci")
       m.add_column('test', "varchar(32) DEFAULT 'foo'")
       m.change_column('name', 'varchar(99) NOT NULL')
+      m.remove_index('index_people_on_created_at')
+      m.add_index(:code)
+      m.add_index([:created_at, :code], unique: true, name: 'idx_test', length: {code: 191})
     end
 
     conn = ActiveRecord::Base.connection
@@ -50,8 +53,9 @@ describe Zdm do
         `test` varchar(32) COLLATE utf8_unicode_ci DEFAULT 'foo',
         PRIMARY KEY (`id`),
         UNIQUE KEY `index_people_on_name` (`name`) USING BTREE,
+        UNIQUE KEY `idx_test` (`created_at`,`code`(191)) USING BTREE,
         KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE,
-        KEY `index_people_on_created_at` (`created_at`) USING BTREE
+        KEY `index_people_on_code` (`code`(191)) USING BTREE
       ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     EOS
 
@@ -82,10 +86,12 @@ describe Zdm do
           `account_id` int(11) DEFAULT NULL,
           `name` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
           `code` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-          `created_at` datetime DEFAULT NULL, PRIMARY KEY (`id`),
+          `created_at` datetime DEFAULT NULL,
+          PRIMARY KEY (`id`),
           UNIQUE KEY `index_people_on_name` (`name`) USING BTREE,
+          UNIQUE KEY `idx_test` (`created_at`,`code`(191)) USING BTREE,
           KEY `index_people_on_account_id_and_code` (`account_id`,`code`(191)) USING BTREE,
-          KEY `index_people_on_created_at` (`created_at`) USING BTREE
+          KEY `index_people_on_code` (`code`(191)) USING BTREE
         ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       EOS
 
