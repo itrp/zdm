@@ -25,7 +25,11 @@ module Zdm
     end
 
     def tables_method
-      ActiveRecord.version.to_s =~ /^5/ ? :data_sources : :tables
+      rails5? ? :data_sources : :tables
+    end
+
+    def rails5?
+      ActiveRecord.version.to_s =~ /^5/
     end
 
     BATCH_SIZE = 40_000

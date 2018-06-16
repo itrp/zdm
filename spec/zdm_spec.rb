@@ -45,7 +45,7 @@ describe Zdm do
     stmt = conn.select_rows('show create table people')[0][1]
     expect(stmt.squish).to eq(<<-EOS.squish)
       CREATE TABLE `people` (
-        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `id` #{Zdm.rails5? ? 'bigint(20)' : 'int(11)'} NOT NULL AUTO_INCREMENT,
         `account_id` int(11) DEFAULT NULL,
         `name` varchar(99) COLLATE utf8_unicode_ci NOT NULL,
         `code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -82,7 +82,7 @@ describe Zdm do
     stmt = conn.select_rows('show create table people')[0][1]
     expect(stmt.squish).to eq(<<-EOS.squish)
         CREATE TABLE `people` (
-          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `id` #{Zdm.rails5? ? 'bigint(20)' : 'int(11)'} NOT NULL AUTO_INCREMENT,
           `account_id` int(11) DEFAULT NULL,
           `name` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
           `code` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -171,5 +171,18 @@ describe Zdm do
 
   end
 
+  it 'cleans up archive tables' do
+    Zdm.change_table(:people) do |m|
+      m.add_column('test2', "varchar(1)")
+    end
 
+    Zdm.cleanup(before: 1.day.ago)
+    conn = ActiveRecord::Base.connection
+    tables = conn.send(Zdm.tables_method).select { |name| name.starts_with?('zdma_') }
+    expect(tables).to_not be_empty
+
+    Zdm.cleanup(before: 1.day.from_now)
+    tables = conn.send(Zdm.tables_method).select { |name| name.starts_with?('zdma_') }
+    expect(tables).to be_empty
+  end
 end

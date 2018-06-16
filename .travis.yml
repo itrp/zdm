@@ -1,15 +1,14 @@
 language: ruby
 
 rvm:
-  - 2.3.0
-  - 2.4.0
+  - 2.4.3
+  - 2.5.1
 
 sudo: false
 
 gemfile:
-  - gemfiles/4.1.gemfile
   - gemfiles/4.2.gemfile
-  - gemfiles/5.0.gemfile
+  - gemfiles/5.2.gemfile
 
 services:
   - mysql
