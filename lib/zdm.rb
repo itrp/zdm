@@ -47,8 +47,8 @@ module Zdm
     def find_in_batches(table_name, start: nil, finish: nil, batch_size: BATCH_SIZE, progress_every: PROGRESS_EVERY, &block)
       min = start || connection.select_value('SELECT MIN(`id`) FROM %s' % table_name)
       return unless min
-
       max = finish || connection.select_value('SELECT MAX(`id`) FROM %s' % table_name)
+      return unless max
       todo = max - min + 1
       return unless todo > 0
 
