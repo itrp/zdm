@@ -113,7 +113,7 @@ module Zdm
     def initialize(name)
       @origin = name
       @copy = "zdm_#{name}"
-      @archive = "zdma_#{Time.now.strftime("%Y%m%d_%H%M%S%N")}_#{name}"[0..64]
+      @archive = "zdma_#{Time.now.strftime("%Y%m%d_%H%M%S%N")}_#{name}"[0...64]
       @statements = []
     end
 
